@@ -9,8 +9,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; there's nothing customizable here
+prot gfx
 
-		!OFFSET = $1528
+
+		!OFFSET = !1528
 
 		!PLAT_THK = $07		; pixels below stand position to assume standing, higher for steeper slopes
 		!PLAT_STICKY = $02	; pixels above stand position to assume standing, higher for steeper slopes
@@ -20,6 +22,7 @@
 		!PLAT_Y2 = $06		; /
 		!YPOSTMP = $08		; scratch RAM used in slope processing for Y position of standing
 		!TMP1 = $0A		; general use scratch RAM
+		!TMP2 = $0C
 
 		!PLAT_H = !PLAT_THK+!PLAT_STICKY	; total height of vertical interaction in any given point
 
@@ -85,7 +88,7 @@ RETURN1:		RTS
 NO_STAND1:	JMP NO_STAND
 
 SPRITE_ROUTINE:	JSR SUB_GFX
-		LDA $14C8,x		; \  RETURN if
+		LDA !14C8,x		; \  RETURN if
 		CMP #$08		;  | sprite status
 		BNE RETURN1		; /  is not 8
 		LDA $9D			; \ RETURN if
@@ -107,7 +110,7 @@ SPRITE_ROUTINE:	JSR SUB_GFX
 		STA !PLAT_Y2		; /
 		PLP			; load backed up processor bits
 
-		LDA $187A		; \
+		LDA $187A|!Base2		; \
 		BEQ NOYOSHI1		;  | temporarily
 		LDA $96			;  | offset Mario's
 		CLC			;  | Y position if
@@ -120,11 +123,11 @@ NOYOSHI1:
 
 		LDA $7D			; \ no standing if
 		BMI NO_STAND1		; / Mario is going up
-		LDA $E4,x		; \
+		LDA !E4,x		; \
 		CLC			;  | if Mario
 		ADC !PLAT_X1		;  | is before
 		STA !TMP1		;  | X1, then
-		LDA $14E0,x		;  | don't
+		LDA !14E0,x		;  | don't
 		ADC !PLAT_X1+1		;  | stand 
 		STA !TMP1+1		;  |
 		LDA !TMP1		;  |
@@ -132,11 +135,11 @@ NOYOSHI1:
 		LDA !TMP1+1		;  |
 		SBC $95			;  |
 		BPL NO_STAND1		; /
-		LDA $E4,x		; \
+		LDA !E4,x		; \
 		CLC			;  | if Mario
 		ADC !PLAT_X2		;  | is after
 		STA !TMP1		;  | X2, then
-		LDA $14E0,x		;  | don't
+		LDA !14E0,x		;  | don't
 		ADC !PLAT_X2+1		;  | stand
 		STA !TMP1+1		;  |
 		LDA !TMP1		;  |
@@ -158,14 +161,20 @@ NOYOSHI1:
 		LDA !PLAT_Y2+1		;  |
 		SBC #$00		;  |
 		STA !PLAT_Y2+1		; /
-		LDA $E4,x		; \
+		LDA !E4,x		; \
 		CLC			;  | get Mario's
 		ADC !PLAT_X1		;  | X position
 		STA !TMP1		;  | relative to
 		LDA $94			;  | platform start
 		SEC			;  |
 		SBC !TMP1		; /
+if !sa1 == 0
 		STA $4202		; set as multiplicand
+else
+		STZ $2250 ; -----OO    O = operation        00 = Multiplication        01 = Division
+		STA $2251
+		STZ $2252		; set as multiplicand
+endif
 		LDA !PLAT_Y2		; \
 		CMP !PLAT_Y1		;  | negative slope
 		LDA !PLAT_Y2+1		;  | or positive
@@ -174,30 +183,77 @@ NOYOSHI1:
 		LDA !PLAT_Y2		; \  POSITIVE:
 		SEC			;  | Y2-Y1 is "rise"
 		SBC !PLAT_Y1		; /  in slope
+if !sa1 == 0
 		STA $4203		; set as multiplier
+else
+		STA $2253
+		STZ $2254		; set as multiplier
+endif
 		LDY #$00		; Y=0 means slope is positive
 		BRA STARTDIV		; skip over to division
-NEG_SLP:		LDA !PLAT_Y1		; \  NEGATIVE:
+NEG_SLP:
+		LDA !PLAT_Y1		; \  NEGATIVE:
 		SEC			;  | Y1-Y2 is "rise" in
 		SBC !PLAT_Y2		; /  slope (going other way)
+if !sa1 == 0
 		STA $4203		; set as multiplier
+else
+		STA $2253
+		STZ $2254		; set as multiplier
+endif
 		LDY #$01		; Y=1 means slope is negative
-STARTDIV:	LDA $4216		; \
+if !sa1 == 0
+STARTDIV:
+		NOP #3 ; 2 cycles from LDY# already
+
+		LDA $4216		; \
 		STA $4204		;  | put product
+		STA !TMP2
 		LDA $4217		;  | into dividend
 		STA $4205		; /
 		LDA !PLAT_X2		; \  get "run" (X)
 		SEC			;  | in slope
 		SBC !PLAT_X1		; /
 		STA $4206		; set as divisor
+		NOP #8
+
 		LDA $4214		; \ quotient goes
+
+else
+STARTDIV:
+		NOP #2
+		LDA $2306		; \
+		PHA
+		LDA #$01
+		STA $2250
+		PLA
+		STA !TMP2
+		STA $2251
+		STZ $2252		;  | put product
+		LDA $2307		;  | into dividend
+		STA $2252		; /
+		LDA !PLAT_X2		; \  get "run" (X)
+		SEC			;  | in slope
+		SBC !PLAT_X1		; /
+		STA $2253
+		STZ $2254
+		NOP
+		NOP
+		NOP      		; set as divisor
+		LDA $2306		; \ quotient goes
+endif
 		STA !TMP1		; / into scratch RAM
 		STZ !TMP1+1		; and zero high byte
 		PHP			; back up processor bits
 		REP #%00100000		; 16 bit A/math
+if !sa1 == 0
 		LDA $4216		; \  
+else
+		LDA $2308 ; conversion had LDA $2306		; \  
+endif
 		ASL A			;  | round up if
-		CMP $4204		;  | remainder >=
+		; CMP $4204		;  | remainder >=  original was this, but this is open bus
+		CMP !TMP2
 		BCC CHKNEG		;  | 1/2 dividend
 		INC !TMP1		; /
 CHKNEG:		CPY #$00		; \ if Y=0 (not negative)
@@ -211,11 +267,11 @@ ADDYINT:		LDA !TMP1		; \  since X1 is considered
 		ADC !PLAT_Y1		; /  Y1 is the Y intercept
 		STA !YPOSTMP		; set sum to standing Y position
 		PLP			; load backed up processor bits
-		LDA $D8,x		; \
+		LDA !D8,x		; \
 		CLC			;  | actual Y
 		ADC !YPOSTMP		;  | position
 		STA !TMP1		;  | is offset
-		LDA $14D4,x		;  | by sprite's
+		LDA !14D4,x		;  | by sprite's
 		ADC !YPOSTMP+1		;  | Y position
 		STA !TMP1+1		; /
 		LDA !TMP1		; \
@@ -236,14 +292,14 @@ ADDYINT:		LDA !TMP1		; \  since X1 is considered
 		SBC $97			;  | there's no standing
 		BMI NO_STAND		; /
 		LDA #$01		; \ set standing
-		STA $1471		; / mode
+		STA $1471|!Base2		; / mode
 		LDA #$06                ; \ set riding
-		STA $154C,x             ; / sprite mode
-		LDA $D8,x		; \
+		STA !154C,x             ; / sprite mode
+		LDA !D8,x		; \
 		CLC			;  | set Mario
 		ADC !YPOSTMP		;  | in standing
 		STA $96			;  | Y position
-		LDA $14D4,x		;  |
+		LDA !14D4,x		;  |
 		ADC !YPOSTMP+1		;  |
 		STA $97			; /
 		LDA $96			; \
@@ -282,7 +338,7 @@ NO_STAND:
 DECFLAT:		DEC !OFFSET,x		; rotate CCW
 ENDFLATROT:
 
-		LDA $187A		; \
+		LDA $187A|!Base2		; \
 		BEQ NOYOSHI2		;  | reverse
 		LDA $96			;  | temporary
 		SEC			;  | Mario offset
@@ -294,26 +350,26 @@ ENDFLATROT:
 NOYOSHI2:
 		JSL $019138		; interact with objects
 
-		LDA $164A,x		; \ in water
+		LDA !164A,x		; \ in water
 		BNE INWATER		; / or not?
-INAIR:		INC $AA,x		; increase Y speed for gravity
-		LDA $AA,x		; \ skip speed reducer
+INAIR:		INC !AA,x		; increase Y speed for gravity
+		LDA !AA,x		; \ skip speed reducer
 		BPL ENDFLOAT		; / if Y is positive
 		CMP #$FA		; \ > FA (-6) means
 		BCS ENDFLOAT		; / skip speed reducer
 		LDA #$FA		; \ keep
-		STA $AA,x		; / at FA
+		STA !AA,x		; / at FA
 		BRA ENDFLOAT		; skip in-water code
 INWATER:		LDA $14			; \
 		AND #%00000001		;  | float up half the speed
 		BNE WATERCHKSPD		;  | it would be falling down
-		DEC $AA,x		; /
-WATERCHKSPD:	LDA $AA,x		; \ skip speed reducer
+		DEC !AA,x		; /
+WATERCHKSPD:	LDA !AA,x		; \ skip speed reducer
 		BMI ENDFLOAT		; / if Y is negative
 		CMP #$06		; \ < 06 means
 		BCC ENDFLOAT		; / skip speed reducer
 		LDA #$06		; \ keep
-		STA $AA,x		; / at 06
+		STA !AA,x		; / at 06
 ENDFLOAT:
 
         	JSL $01801A             ; Update Y position without gravity
@@ -349,20 +405,20 @@ TILELP:		CPX #$04		; end of loop?
 		LDA $00			; get sprite's X position
 		CLC			; \ offset by
 		ADC ROCK_XPOS,x		; / tile's X
-		STA $0300,y		; set tile's X position
+		STA $0300|!Base2,y		; set tile's X position
 		LDA $01			; get sprite's Y position
 		CLC			; \ offset by
 		ADC ROCK_YPOS,x		; / tile's Y
-		STA $0301,y		; set tile's Y position
+		STA $0301|!Base2,y		; set tile's Y position
 		LDA !TEMP_FOR_TILE	; load tile # from scratch RAM
 		CLC			; \ shift tile right/down
 		ADC ROCK_TILES,x	; / according to which part
-		STA $0302,y		; set tile #
+		STA $0302|!Base2,y		; set tile #
 		PHX			; back up X (index to tile data)
-		LDX $15E9		; load X with index to sprite
-		LDA $15F6,x		; load palette info
+		LDX $15E9|!Base2		; load X with index to sprite
+		LDA !15F6,x		; load palette info
 		ORA $64			; add in priority bits
-		STA $0303,y		; set extra info
+		STA $0303|!Base2,y		; set extra info
 		PLX			; load backed up X
 		INC !TILESDRAWN		; another tile was drawn
 		INY #4
@@ -385,10 +441,10 @@ NODRAW:		RTS
 
 !TEMP = $09
 
-!SLOTPTR = $0660		;16bit pointer for source GFX
-!SLOTBANK = $0662	;bank
-!SLOTDEST = $0663	;VRAM address
-!SLOTSUSED = $06FE	;how many SLOTS have been used
+!SLOTPTR = $0660|!Base2		;16bit pointer for source GFX
+!SLOTBANK = $0662|!Base2	;bank
+!SLOTDEST = $0663|!Base2	;VRAM address
+!SLOTSUSED = $06FE|!Base2	;how many SLOTS have been used
 
 !MAXSLOTS = $04		;maximum selected SLOTS
 
@@ -407,14 +463,12 @@ GETSLOT:
 	XBA		;<< 8
 	LSR A		;>> 1 = << 7
 	STA !TEMP	;back to scratch
-	PEA SPRITEGFX	;push 16bit address, since i'm not sure how else i'm going to get the address of the label itself in TRASM
-	PLA		;pull 16bit address
+	LDA.w #gfx
 	CLC
 	ADC !TEMP	;add frame offset	
 	STA !SLOTPTR	;store to pointer to be used at transfer time
 	SEP #$20	;8bit store
-	PHB		;push db...
-	PLA		;pull to A...
+	LDA.b #bank(gfx)
 	STA !SLOTBANK	;store bank to 24bit pointer
 
 	LDY !SLOTSUSED	;calculate VRAM address + tile number
@@ -450,6 +504,130 @@ NONEFREE:
 
 ;DMA ROM -> RAM ROUTINE
 
+if !sa1
+DMABUFFER:
+;set destination RAM address
+	REP #$20
+	LDY #$C4
+	STY $2230
+	LDA.w !SLOTDEST
+	ADC #$74BC
+	STA $2235	;16bit RAM dest
+	        
+	         	;set 7F as bank
+
+;common DMA settings
+	         	;1 reg only
+	        	;to 2180, RAM write/read
+	         
+
+;first line
+	LDA !SLOTPTR
+	STA $2232	;low 16bits
+	LDY !SLOTBANK
+	STY $2234	;bank
+	LDY #$80	;128 bytes
+	STZ $2238
+	STY $2238
+	LDY #$41
+	STY $2237
+	
+	LDY $318C
+	BEQ $FB
+	LDY #$00
+	STY $318C
+	STY $2230	;transfer
+
+;second line
+	LDY #$C4
+	STY $2230
+	LDA.w !SLOTDEST	;update buffer dest
+	CLC
+	ADC #$0200	;512 byte rule for sprites
+	STA !SLOTDEST	;updated base
+	ADC #$74BC
+	STA $2235	;updated RAM address
+
+	LDA !SLOTPTR	;update source address
+	CLC
+	ADC #$0200	;512 bytes, next row
+	STA !SLOTPTR
+	STA $2232	;low 16bits
+	LDY !SLOTBANK
+	STY $2234	;bank
+	LDY #$80
+	STZ $2238
+	STY $2238
+	LDY #$41
+	STY $2237
+	
+	LDY $318C
+	BEQ $FB
+	LDY #$00
+	STY $318C
+	STY $2230	;transfer
+
+;third line
+	LDY #$C4
+	STY $2230
+	LDA.w !SLOTDEST	;update buffer dest
+	CLC
+	ADC #$0200	;512 byte rule for sprites
+	STA !SLOTDEST	;updated base
+	ADC #$74BC
+	STA $2235	;updated RAM address
+
+	LDA !SLOTPTR	;update
+	CLC
+	ADC #$0200
+	STA !SLOTPTR
+	STA $2232
+	LDY !SLOTBANK
+	STY $2234
+	LDY #$80
+	STZ $2238
+	STY $2238
+	LDY #$41
+	STY $2237
+	
+	LDY $318C
+	BEQ $FB
+	LDY #$00
+	STY $318C
+	STY $2230	;transfer
+
+;fourth line
+	LDY #$C4
+	STY $2230
+	LDA.w !SLOTDEST	;update buffer dest
+	CLC
+	ADC #$0200	;512 byte rule for sprites
+	STA !SLOTDEST	;updated base
+	ADC #$74BC
+	STA $2235	;updated RAM address
+
+	LDA !SLOTPTR
+	CLC
+	ADC #$0200
+	STA !SLOTPTR
+	STA $2232
+	LDY !SLOTBANK
+	STY $2234
+	LDY #$80
+	STZ $2238
+	STY $2238
+	LDY #$41
+	STY $2237
+	
+	LDY $318C
+	BEQ $FB
+	LDY #$00
+	STY $318C
+	STY $2230
+
+	SEP #$20	;8bit A
+	RTS		;all done, RETURN
+else
 DMABUFFER:
 ;set destination RAM address
 	REP #$20
@@ -533,6 +711,7 @@ DMABUFFER:
 	SEP #$20	;8bit A
 	RTS		;all done, RETURN
 
+endif
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This will convert a frame offset
 ;; into a pointer for a dynamic frame
@@ -565,5 +744,4 @@ OFF2FRM:		PHY
 		RTS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-SPRITEGFX:
-incbin floatingrock.bin		;included graphics file                                       
+incbin floatingrock.bin -> gfx		;included graphics file                                       
