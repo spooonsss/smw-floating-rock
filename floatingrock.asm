@@ -4,7 +4,7 @@
 ;
 ; Uses first extra bit: NO
 ;
-; You will need to patch SMKDan's dsx.asm to your ROM with xkas
+; You will need to patch SMKDan's dsx.asm to your ROM
 ; this sprite, like all other dynamic sprites, uses the last 4 rows of sp4
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
