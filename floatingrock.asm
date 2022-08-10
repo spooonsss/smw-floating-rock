@@ -454,7 +454,7 @@ SETTILES:
     BEQ NODRAW               ; / if no tiles
     LDY #$02                 ; #$02 means 16x16
     DEC A                    ; A = # tiles - 1
-    JSL $01B7B3|!bank        ; don't draw if offscreen
+    %FinishOAMWrite()        ; don't draw if offscreen
 NODRAW:
     RTS
 
