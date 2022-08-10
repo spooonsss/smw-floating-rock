@@ -209,7 +209,7 @@ endif
     LDY #$01                 ; Y=1 means slope is negative
 if !sa1 == 0
 STARTDIV:
-    NOP #3                   ; 2 cycles from LDY# already
+    NOP #3                   ; wait 6 cycles; 2 cycles from LDY# already
 
     LDA $4216                ; \
     STA $4204                ;  | put product
@@ -220,13 +220,13 @@ STARTDIV:
     SEC                      ;  | in slope
     SBC !PLAT_X1             ; /
     STA $4206                ; set as divisor
-    NOP #8
+    PHB : PLB : PHB : PLB : NOP ; wait 16 cycles
 
     LDA $4214                ; \ quotient goes
 
 else
 STARTDIV:
-    NOP #2
+    NOP #2                   ; wait 4 cycles; 2 cycles from LDY# already
     LDA $2306                ; \
     PHA
     LDA #$01
@@ -240,11 +240,10 @@ STARTDIV:
     LDA !PLAT_X2             ; \  get "run" (X)
     SEC                      ;  | in slope
     SBC !PLAT_X1             ; /
-    STA $2253
+    STA $2253                ; set as divisor
     STZ $2254
     NOP
-    NOP
-    NOP                      ; set as divisor
+    BRA $00
     LDA $2306                ; \ quotient goes
 endif
     STA !TMP1                ; / into scratch RAM
